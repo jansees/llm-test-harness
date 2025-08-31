@@ -1,0 +1,115 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: llm
+---
+# PVC so the model persists across restarts
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: models-pvc
+  namespace: llm
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 4Gi
+  storageClassName: standard   # optional; omit to use cluster default
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm
+  namespace: llm
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: llm }
+  template:
+    metadata:
+      labels: { app: llm }
+    spec:
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: models-pvc
+      initContainers:
+        - name: fetch-model
+          image: curlimages/curl:8.9.1
+          env:
+            - name: MODEL_URL
+              value: "https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: hf       # created with:  kubectl -n llm create secret generic hf --from-literal=token=hf_xxx
+                  key: token
+            # If (and only if) you use a proxy, set these to real values:
+            # - name: HTTP_PROXY
+            #   value: http://proxy.host:port
+            # - name: HTTPS_PROXY
+            #   value: http://proxy.host:port
+            # - name: NO_PROXY
+            #   value: 127.0.0.1,localhost,.svc,.cluster.local
+          command: ["sh","-lc"]
+          args:
+            - |
+              set -euo pipefail
+              mkdir -p /models
+              if [ -s /models/model.gguf ]; then
+                echo "Model already present:"; ls -lh /models/model.gguf; exit 0
+              fi
+              tmp=/models/.model.tmp
+              echo "Downloading $MODEL_URL ..."
+              curl -fL --retry 8 --retry-all-errors --retry-delay 3 \
+                   -H "Authorization: Bearer $HF_TOKEN" \
+                   -H "Accept: application/octet-stream" \
+                   -o "$tmp" "$MODEL_URL"
+              MAGIC="$(head -c 4 "$tmp" || true)"
+              if [ "$MAGIC" != "GGUF" ]; then
+                echo "Downloaded file is NOT GGUF (magic='$MAGIC'). First bytes:"; hexdump -C -n 64 "$tmp" || true
+                exit 1
+              fi
+              mv -f "$tmp" /models/model.gguf
+              ls -lh /models
+          volumeMounts:
+            - { name: models, mountPath: /models }
+      containers:
+        - name: server
+          image: ghcr.io/ggerganov/llama.cpp:server
+          args:
+            - "-m"
+            - "/models/model.gguf"
+            - "-c"
+            - "1024"          # keep modest for laptop RAM
+            - "--host"
+            - "0.0.0.0"
+            - "--port"
+            - "8080"
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - { name: models, mountPath: /models }
+          readinessProbe:
+            tcpSocket: { port: 8080 }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "1"
+              memory: "2Gi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm
+  namespace: llm
+spec:
+  selector: { app: llm }
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080

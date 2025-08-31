@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="9.490" timestamp="2025-08-31T12:54:41.175846-05:00" hostname="JansiOne"><testcase classname="harness.test_latency_throughput" name="test_latency_throughput" time="9.334"><failure message="AssertionError: throughput too low for tiny model&#10;assert 2.7229703780140655 &gt;= 3.0&#10; +  where 2.7229703780140655 = &lt;function mean at 0x000002151E6625C0&gt;([1.8908007273998033, 3.2053585903316315, 3.072751816310761])&#10; +    where &lt;function mean at 0x000002151E6625C0&gt; = stats.mean">client = &lt;harness.client.LlamaCppClient object at 0x000002151C24D050&gt;
+
+    def test_latency_throughput(client):
+        lats, tps = [], []
+        for _ in range(3):
+            out, dt, usage = client.chat([{"role":"user","content":"Say 'hello' exactly."}],
+                                         temperature=0.0, seed=42, max_tokens=8)
+            assert "hello" in out.lower()
+            lats.append(dt)
+            tps.append(tokens_per_second(usage, dt))
+        p95 = sorted(lats)[int(0.95*len(lats))-1]
+        assert p95 &lt; 5.0, f"p95 latency too high: {p95:.2f}s"
+&gt;       assert stats.mean(tps) &gt;= 3.0, "throughput too low for tiny model"
+E       AssertionError: throughput too low for tiny model
+E       assert 2.7229703780140655 &gt;= 3.0
+E        +  where 2.7229703780140655 = &lt;function mean at 0x000002151E6625C0&gt;([1.8908007273998033, 3.2053585903316315, 3.072751816310761])
+E        +    where &lt;function mean at 0x000002151E6625C0&gt; = stats.mean
+
+harness\test_latency_throughput.py:14: AssertionError</failure></testcase></testsuite></testsuites>
