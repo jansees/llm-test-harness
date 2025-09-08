@@ -1,0 +1,8 @@
+llama.cpp server is deploying.
+Namespace: {{ .Values.namespace.name | default .Release.Namespace }}
+Service:   {{ include "llm-chart.fullname" . }} ({{ .Values.service.type }})
+Port:      {{ .Values.service.port }}
+To port-forward locally:
+  kubectl -n {{ .Values.namespace.name | default .Release.Namespace }} port-forward svc/{{ include "llm-chart.fullname" . }} 8080:{{ .Values.service.port }}
+Then try:
+  curl http://localhost:8080/health 

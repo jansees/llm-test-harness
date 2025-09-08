@@ -1,0 +1,108 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "llm-chart.fullname" . }}
+  namespace: {{ .Values.namespace.name | default .Release.Namespace }}
+  labels:
+    {{- include "llm-chart.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ include "llm-chart.fullname" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "llm-chart.fullname" . }}
+        {{- include "llm-chart.labels" . | nindent 8 }}
+    spec:
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.claimName }}
+      initContainers:
+        - name: fetch-model
+          image: "{{ .Values.images.fetcher.repository }}:{{ .Values.images.fetcher.tag }}"
+          imagePullPolicy: {{ .Values.images.fetcher.pullPolicy }}
+          env:
+            - name: MODEL_URL
+              value: {{ .Values.model.url | quote }}
+            {{- if or .Values.model.existingSecret .Values.model.hfToken }}
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ default "hf" .Values.model.existingSecret }}
+                  key: token
+            {{- end }}
+            {{- if .Values.proxy.http }}
+            - name: HTTP_PROXY
+              value: {{ .Values.proxy.http | quote }}
+            {{- end }}
+            {{- if .Values.proxy.https }}
+            - name: HTTPS_PROXY
+              value: {{ .Values.proxy.https | quote }}
+            {{- end }}
+            - name: NO_PROXY
+              value: {{ .Values.proxy.noProxy | quote }}
+          command: ["sh","-lc"]
+          args:
+            - |
+              set -euo pipefail
+              mkdir -p /models
+              if [ -s /models/model.gguf ]; then
+                echo "Model already present:"; ls -lh /models/model.gguf; exit 0
+              fi
+              tmp=/models/.model.tmp
+              echo "Downloading $MODEL_URL ..."
+              curl -fL --retry 8 --retry-all-errors --retry-delay 3 \
+                {{- if or .Values.model.existingSecret .Values.model.hfToken }}
+                -H "Authorization: Bearer $HF_TOKEN" \
+                {{- end }}
+                -H "Accept: application/octet-stream" \
+                -o "$tmp" "$MODEL_URL"
+              MAGIC="$(head -c 4 "$tmp" || true)"
+              if [ "$MAGIC" != "GGUF" ]; then
+                echo "Downloaded file is NOT GGUF (magic='$MAGIC'). First bytes:"; hexdump -C -n 64 "$tmp" || true
+                exit 1
+              fi
+              mv -f "$tmp" /models/model.gguf
+              ls -lh /models
+          volumeMounts:
+            - name: models
+              mountPath: /models
+      containers:
+        - name: server
+          image: "{{ .Values.images.server.repository }}:{{ .Values.images.server.tag }}"
+          imagePullPolicy: {{ .Values.images.server.pullPolicy }}
+          args:
+            - "-m"
+            - "/models/model.gguf"
+            - "-c"
+            - "{{ .Values.server.contextLength }}"
+            - "--host"
+            - "{{ .Values.server.host }}"
+            - "--port"
+            - "{{ .Values.server.port }}"
+            {{- range .Values.server.extraArgs }}
+            - "{{ . }}"
+            {{- end }}
+          ports:
+            - containerPort: {{ .Values.server.port }}
+          volumeMounts:
+            - name: models
+              mountPath: /models
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          {{- if .Values.readinessProbe.enabled }}
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.server.port }}
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          {{- end }}
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      tolerations:
+        {{- toYaml .Values.tolerations | nindent 8 }}
+      affinity:
+        {{- toYaml .Values.affinity | nindent 8 }}

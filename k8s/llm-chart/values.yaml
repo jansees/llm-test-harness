@@ -1,0 +1,70 @@
+# --- Release/namespace settings ---
+namespace:
+  create: true               # If false, you must create the namespace yourself or install with --namespace to an existing one
+  name: llm
+nameOverride: ""
+fullnameOverride: ""
+
+# --- Images ---
+images:
+  server:
+    repository: ghcr.io/ggerganov/llama.cpp
+    tag: "server"
+    pullPolicy: IfNotPresent
+  fetcher:
+    repository: curlimages/curl
+    tag: "8.9.1"
+    pullPolicy: IfNotPresent
+
+# --- Model download ---
+model:
+  url: "https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
+  # If you already have a secret with key `token`, set existingSecret and leave token empty.
+  hfToken: ""                # Plain token for demo/dev only; leave empty to avoid creating a Secret
+  existingSecret: ""         # Name of an existing secret that has key: token
+
+# --- PVC storage ---
+persistence:
+  enabled: true
+  claimName: models-pvc
+  accessModes: ["ReadWriteOnce"]
+  size: 4Gi
+  storageClassName: "standard"  # Set to "" to use the cluster default
+
+# --- llama.cpp server args ---
+server:
+  port: 8080
+  host: "0.0.0.0"
+  contextLength: 1024
+  extraArgs: []              # e.g., ["--mlock", "--parallel", "2"]
+
+# --- Probes ---
+readinessProbe:
+  enabled: true
+  initialDelaySeconds: 5
+  periodSeconds: 5
+
+# --- Resources ---
+resources:
+  requests:
+    cpu: "500m"
+    memory: "1Gi"
+  limits:
+    cpu: "1"
+    memory: "2Gi"
+
+# --- Pod scheduling ---
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# --- Service ---
+service:
+  type: ClusterIP
+  port: 8080
+
+# --- Proxy (optional) ---
+proxy:
+  http: ""     # e.g., http://proxy.host:port
+  https: ""    # e.g., http://proxy.host:port
+  noProxy: "127.0.0.1,localhost,.svc,.cluster.local"
