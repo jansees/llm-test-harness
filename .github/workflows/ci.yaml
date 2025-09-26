@@ -1,0 +1,53 @@
+name: CI
+
+# Triggers workflow on push and pull requests
+on: [push, pull_request]
+
+jobs:
+  e2e-on-kind:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1. Checkout repo
+      - uses: actions/checkout@v4
+
+      # Step 2. Create kind (Kubernetes in Docker) cluster
+      - name: Create kind cluster
+        uses: helm/kind-action@v1
+        with:
+          version: v0.22.0
+          kubectl_version: v1.29.0
+
+      # Step 3. Deploy llama.cpp server
+      - name: Deploy llama.cpp server
+        run: |
+          kubectl apply -f k8s/llamacpp.yaml
+          kubectl -n llm rollout status deploy/llm --timeout=600s
+          kubectl -n llm get pods -o wide
+
+      # Step 4. Port forward service
+      - name: Port forward service
+        run: |
+          kubectl -n llm port-forward svc/llm 8080:8080 &
+          sleep 5
+
+      # Step 5. Set up Python
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # Step 6. Install dependencies
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      # Step 7. Run pytest harness
+      - name: Run tests
+        run: pytest harness --base-url http://127.0.0.1:8080
+
+      # Step 8. Upload test reports
+      - name: Upload reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports
+          path: reports
