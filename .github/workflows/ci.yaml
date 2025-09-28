@@ -3,6 +3,10 @@ name: CI
 # Triggers workflow on push and pull requests
 on: [push, pull_request]
 
+env:
+  ACTIONS_RUNNER_DEBUG: true
+  ACTIONS_STEP_DEBUG: true
+
 jobs:
   e2e-on-kind:
     runs-on: ubuntu-latest
@@ -24,6 +28,13 @@ jobs:
           kubectl apply -f k8s/llamacpp.yaml
           kubectl -n llm rollout status deploy/llm --timeout=600s
           kubectl -n llm get pods -o wide
+
+      # Add more logging
+      - name: Debug
+        run: |
+          echo "Current directory: $(pwd)"
+          echo "List files:"
+          ls -al
 
       # Step 4. Port forward service
       - name: Port forward service
