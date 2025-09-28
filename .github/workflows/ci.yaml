@@ -22,6 +22,35 @@ jobs:
           version: v0.22.0
           kubectl_version: v1.29.0
 
+      # Step 2.1. Create storage class and Persistent Claim
+      - name: Create storage class and PV
+        run: |
+          kubectl apply -f - <<EOF
+          apiVersion: storage.k8s.io/v1
+          kind: StorageClass
+          metadata:
+            name: standard
+            annotations:
+              storageclass.kubernetes.io/is-default-class: "true"
+          provisioner: kubernetes.io/no-provisioner
+          volumeBindingMode: WaitForFirstConsumer
+          EOF
+
+          kubectl apply -f - <<EOF
+          apiVersion: v1
+          kind: PersistentVolume
+          metadata:
+            name: local-pv
+          spec:
+            capacity:
+              storage: 4Gi
+            accessModes:
+              - ReadWriteOnce
+            hostPath:
+              path: "/tmp/data"
+            storageClassName: standard
+          EOF
+
       # Step 2a. Debugging
       - name: Get pods in the llm namespace
         run: kubectl get pods -n llm -o wide
@@ -36,6 +65,12 @@ jobs:
 
       - name: Describe PVC
         run: kubectl describe pvc models-pvc -n llm
+
+      #Step 2.2 Create HF secret
+      - name: Create Hugging Face secret
+        run: |
+          kubectl -n llm create secret generic hf --from-literal=token=${{ secrets.HF_TOKEN }}
+
 
       # Step 3. Deploy llama.cpp server
       - name: Deploy llama.cpp server
