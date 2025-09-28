@@ -44,10 +44,10 @@ jobs:
       - name: Get pods in the llm namespace
         run: kubectl get pods -n llm -o wide
 
-      - name: Describe pod
-        run: |
-          kubectl get pods -n llm -o wide || true
-          kubectl describe pods -n llm || true
+     # - name: Describe pod
+     #   run: |
+     #     kubectl get pods -n llm -o wide || true
+     #     kubectl describe pods -n llm || true
 
       - name: Get PVCs
         run: kubectl get pvc -n llm
