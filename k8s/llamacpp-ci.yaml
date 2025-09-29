@@ -1,0 +1,95 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: llm
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm
+  namespace: llm
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: llm }
+  template:
+    metadata:
+      labels: { app: llm }
+    spec:
+      volumes:
+        - name: models
+          emptyDir: {}
+      initContainers:
+        - name: fetch-model
+          image: curlimages/curl:8.9.1
+          env:
+            - name: MODEL_URL
+              value: "https://huggingface.co/ggml-org/tinygemma3-GGUF/resolve/main/tinygemma3-Q8_0.gguf"
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: hf
+                  key: token
+          command: ["sh","-lc"]
+          args:
+            - |
+              set -euo pipefail
+              mkdir -p /models
+              if [ -s /models/model.gguf ]; then
+                echo "Model already present:"; ls -lh /models/model.gguf; exit 0
+              fi
+              tmp=/models/.model.tmp
+              echo "Downloading $MODEL_URL ..."
+              curl -fL --retry 8 --retry-all-errors --retry-delay 3 \
+                   -H "Authorization: Bearer $HF_TOKEN" \
+                   -H "Accept: application/octet-stream" \
+                   -o "$tmp" "$MODEL_URL"
+              MAGIC="$(head -c 4 "$tmp" || true)"
+              if [ "$MAGIC" != "GGUF" ]; then
+                echo "Downloaded file is NOT GGUF (magic='$MAGIC'). First bytes:"; hexdump -C -n 64 "$tmp" || true
+                exit 1
+              fi
+              mv -f "$tmp" /models/model.gguf
+              ls -lh /models
+          volumeMounts:
+            - { name: models, mountPath: /models }
+      containers:
+        - name: server
+          image: ghcr.io/ggerganov/llama.cpp:server
+          args:
+            - "-m"
+            - "/models/model.gguf"
+            - "-c"
+            - "1024"
+            - "--host"
+            - "0.0.0.0"
+            - "--port"
+            - "8080"
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - { name: models, mountPath: /models }
+          readinessProbe:
+            tcpSocket: { port: 8080 }
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 30
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "1"
+              memory: "2Gi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm
+  namespace: llm
+spec:
+  selector: { app: llm }
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
