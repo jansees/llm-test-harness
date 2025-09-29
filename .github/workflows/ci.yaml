@@ -82,11 +82,11 @@ jobs:
             kubectl logs $POD -n llm -c server || true
           fi
 
-      - name: Get PVCs
-        run: kubectl get pvc -n llm
+      # - name: Get PVCs
+      #  run: kubectl get pvc -n llm
 
-      - name: Describe PVC
-        run: kubectl describe pvc models-pvc -n llm
+      # - name: Describe PVC
+      #  run: kubectl describe pvc models-pvc -n llm
 
       # Add more logging
       - name: Debug
