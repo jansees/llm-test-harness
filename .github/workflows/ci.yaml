@@ -54,17 +54,33 @@ jobs:
       - name: Deploy llama.cpp server
         run: |
           kubectl apply -f k8s/llamacpp.yaml
-          kubectl -n llm rollout status deploy/llm --timeout=1800s
-          kubectl -n llm get pods -o wide
+          kubectl -n llm rollout status deploy/llm --timeout=1800s         
+        # kubectl -n llm get pods -o wide
 
       # Step 3a. Debugging
-      - name: Get pods in the llm namespace
+      - name: Get pod details
+        if: always()
         run: kubectl get pods -n llm -o wide
 
-      - name: Describe pod
+      - name: Describe all pods
+        if: always()
+        run: kubectl describe pods -n llm
+
+      - name: Logs from initContainer
+        if: always()
         run: |
-          kubectl get pods -n llm -o wide || true
-          kubectl describe pods -n llm || true
+          POD=$(kubectl get pods -n llm -o jsonpath="{.items[0].metadata.name}" 2>/dev/null || echo "")
+          if [ -n "$POD" ]; then
+            kubectl logs $POD -n llm -c fetch-model || true
+          fi
+
+      - name: Logs from main container
+        if: always()
+        run: |
+          POD=$(kubectl get pods -n llm -o jsonpath="{.items[0].metadata.name}" 2>/dev/null || echo "")
+          if [ -n "$POD" ]; then
+            kubectl logs $POD -n llm -c server || true
+          fi
 
       - name: Get PVCs
         run: kubectl get pvc -n llm
