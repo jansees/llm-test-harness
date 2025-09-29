@@ -54,7 +54,7 @@ jobs:
       - name: Deploy llama.cpp server
         run: |
           kubectl apply -f k8s/llamacpp.yaml
-          kubectl -n llm rollout status deploy/llm --timeout=600s
+          kubectl -n llm rollout status deploy/llm --timeout=1800s
           kubectl -n llm get pods -o wide
 
       # Step 3a. Debugging
