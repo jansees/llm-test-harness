@@ -40,21 +40,6 @@ jobs:
             storageClassName: standard
           EOF
 
-      # Step 2a. Debugging
-      - name: Get pods in the llm namespace
-        run: kubectl get pods -n llm -o wide
-
-     # - name: Describe pod
-     #   run: |
-     #     kubectl get pods -n llm -o wide || true
-     #     kubectl describe pods -n llm || true
-
-      - name: Get PVCs
-        run: kubectl get pvc -n llm
-
-      - name: Describe PVC
-        run: kubectl describe pvc models-pvc -n llm
-
       #Step 2.2 Create HF secret
       - name: Create Hugging Face secret
         run: |
@@ -67,6 +52,21 @@ jobs:
           kubectl apply -f k8s/llamacpp.yaml
           kubectl -n llm rollout status deploy/llm --timeout=600s
           kubectl -n llm get pods -o wide
+
+      # Step 3a. Debugging
+      - name: Get pods in the llm namespace
+        run: kubectl get pods -n llm -o wide
+
+      - name: Describe pod
+        run: |
+          kubectl get pods -n llm -o wide || true
+          kubectl describe pods -n llm || true
+
+      - name: Get PVCs
+        run: kubectl get pvc -n llm
+
+      - name: Describe PVC
+        run: kubectl describe pvc models-pvc -n llm
 
       # Add more logging
       - name: Debug
