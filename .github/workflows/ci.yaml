@@ -22,7 +22,11 @@ jobs:
           version: v0.22.0
           kubectl_version: v1.29.0
 
-      # Step 2.1. Create storage class and Persistent Claim
+      # Step 2.1 Create namespace explicitly so it does not throw error during HF secret creation
+      - name: Create llm namespace
+        run: kubectl create namespace llm || true
+
+      # Step 2.2. Create storage class and Persistent Claim
       - name: Create storage class and PV
         run: |
           kubectl apply -f - <<EOF
@@ -40,7 +44,7 @@ jobs:
             storageClassName: standard
           EOF
 
-      #Step 2.2 Create HF secret
+      #Step 2.3 Create HF secret
       - name: Create Hugging Face secret
         run: |
           kubectl -n llm create secret generic hf --from-literal=token=${{ secrets.HF_TOKEN }}
